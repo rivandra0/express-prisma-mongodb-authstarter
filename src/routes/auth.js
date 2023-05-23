@@ -1,9 +1,12 @@
 import express from 'express'
 const router = express.Router()
+import jwt from 'jsonwebtoken'
 
 import authenticateUser from '../middlewares/authenticateUser.js'
+import { pFindUserByEmail } from '../services/prisma-queries.js'
+
 import { check, validationResult } from 'express-validator'
-import { registerUser, loginUser, verifyUser, sendVerificationEmail } from '../services/auth.js'
+import { registerUser, loginUser, verifyUser, sendEmail, generateHourToken } from '../services/auth.js'
 
 
 const validateUser = [
@@ -28,20 +31,24 @@ router.post('/register', validateUser, async (req, res) => {
     const newUser = await registerUser(email, password)
     res.status(201).json({ status: 201, message:'User Succesfully Created, Please verify your Account', data:newUser})
   } catch (err) {
-    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
 })
 
 
 router.post('/login', validateUser, async (req, res) => {
   const { email, password } = req.body
+  console.log(req.body)
   const validationRes = validationResult(req)
   try {
     checkErrorFromValidate(validationRes)
+    console.log('this is before loginuser')
     const result = await loginUser(email, password)
+    console.log(result)
+    console.log('this is a success')
     res.status(result.status).json(result) 
   } catch (err) {
-    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
 })
 
@@ -72,7 +79,7 @@ router.get('/verify/:token', async (req, res) => {
     res.status(200).send(htmlResponse)
 
   } catch (err) {
-    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
 })
 
@@ -87,35 +94,44 @@ router.post('/verify/send-email', authenticateUser, async (req, res) => {
   console.log('last: ', lastSentEmail)
   console.log('current: ', currentTime)
   console.log('difference: ', differenceInSeconds)
+  
+  const targetEmail = user.email
+  const newUser = { email:user.email, password:user.password }
+  const token = generateHourToken(newUser)
+  const html = `
+    <h1>VERIFY YOUR ACCOUNT</h1>
+    <p>This verification only valid for 1hr. Click the button below to verify your account</p>
+    <a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
+  `
+
   try {
     if (differenceInSeconds < 3600) {
       throw { status:400, message:'Send again only 1hr after the first email' }
     }
-    const emailInfo = await sendVerificationEmail(user)
+
+    const user = await pFindUserByEmail(targetEmail)
+
+    if(user.isVerified) {
+      throw { status:400, message:'user already verified' }
+    }
+
+    const emailInfo = await sendEmail(targetEmail, html, 'Account Verification')
     res.status(200).json({ status: 200, message: 'successfully sent verification Email, check your email' })
   } catch (err) {
-    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
 })
 
 
-// STILL TESTING
-router.post('/forgot-password',check('email').isEmail(), (req, res) => {
+router.post('/forgot-password', (req, res) => {
   const email = req.body.email
   
   // check if the email exist on the user table
   // if exist, send reset email link to the user
-  const validationRes = validationResult(req)
-
-  try {
-    checkErrorFromValidate(validationRes)
-  } catch (err) {
-    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
-  }
 })
 
 
-router.post('/forgot-password/change', (req, res) => {
+router.post('/forgot-password/modify', (req, res) => {
   const html = `<!DOCTYPE html>
     <html>
     <head>

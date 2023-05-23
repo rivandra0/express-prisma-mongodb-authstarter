@@ -4,17 +4,22 @@ import bcrypt from "bcrypt"
 import jwt from 'jsonwebtoken'
 import nodemailer from 'nodemailer'
 
+
+import { pFindUserByEmail } from './prisma-queries.js'
+
+
+function generateHourToken(data) {
+	return jwt.sign(data, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+}
+
 async function registerUser (email, password) {
 	const hashedPassword = await bcrypt.hash(password, 10)
 	try {
 		// checking if the user exist
-		const isExist = await prisma.user.findUnique({
-		  where: {
-		    email: email,
-		  },
-		})
+		const isExist = await pFindUserByEmail(email)
+		
 		if (isExist) {
-			throw { status: 403, message:'User already exist'}
+			throw { status: 403, message:'Email Already Used'}
 		}
 
 		// creating the user
@@ -23,7 +28,22 @@ async function registerUser (email, password) {
 		})
 
 		// send email to the user
-		const emailResult = await sendVerificationEmail(user)
+		const targetEmail = user.email
+	  	const token = generateHourToken(user)
+	  	const html = `
+		    <h1>VERIFY YOUR ACCOUNT</h1>
+		    <p>This verification only valid for 1hr. Click the button below to verify your account</p>
+		    <a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
+		  `
+		await sendEmail(targetEmail, html, 'Account Verification').catch(async(err)=> {
+			await prisma.user.delete({
+				where: {
+					email: targetEmail
+				}
+			})
+			console.log('newly created user is deleted')
+			throw { status:500, message:err.message }
+		})
 
 		// deleting the password from the response
 		delete user.password
@@ -34,22 +54,24 @@ async function registerUser (email, password) {
 	}
 }
 
-async function loginUser (email, password) {
+async function loginUser (email, password) {		
+	console.log('start searching')
+
 	try {
-		// finding one matching user
-		const userRow = await prisma.user.findUnique({
+		// finding one matching user'
+		const userRow = await prisma.user.findFirst({
 		  where: {
 		    email: email
-		  },
+		  }
 		})
-		
-		// creating accesstoken
-		const accessToken = jwt.sign(userRow, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
 
-		// checking if the user exist
-		if (!userRow) {
+		if(userRow === null) {
+			console.log(userRow)
 			throw { status: 404, message: 'User not found' }
 		}
+		console.log('searching result', userRow)
+		// creating accesstoken
+		const accessToken = generateHourToken(userRow)
 
 		// checking if the user is verified
 		if(!userRow.isVerified) {
@@ -62,7 +84,8 @@ async function loginUser (email, password) {
 			throw { status: 400, message: 'Wrong login credentials' }
 		}
 
-		// sending response success 
+		// sending response success
+		console.log('THIS GUY ACTUALLY LOGGED IN') 
 		return { status:200, message: 'Logged in', token: accessToken }
 
 	} catch (err) {
@@ -73,14 +96,18 @@ async function loginUser (email, password) {
 
 async function verifyUser (token) {
 	let userData = null
+
 	try {
+
+
+
 		jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
 		    if(err) {
 		      throw { status: 403, messsage: 'Token Expired' }
 		    }
 		    userData = user
 	  	})
-		
+
 		const updateUser = await prisma.user.update({
 		  where: {
 		    email: userData.email,
@@ -96,14 +123,30 @@ async function verifyUser (token) {
 	}
 }
 
-async function sendVerificationEmail (user) {
-	const targetEmail = user.email
-	const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
-	const html = `
-		<h1>VERIFY YOUR ACCOUNT</h1>
-		<p>This verification only valid for 1hr. Click the button below to verify your account</p>
-		<a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
-	`
+async function forgotPassword (email) {
+	try {
+		// check if the email exist or not
+		const isExist = await prisma.user.findUnique({
+		  where: {
+		    email: email
+		  }
+		})
+		if (!isExist) {
+			throw { status: 404, message:'User not exist'}
+		}
+		// generate accessToken
+		const accessToken = generateHourToken(isExist)
+		// send the token as a link to the user
+
+
+	} catch (err) {
+		throw { status: err.status || 500, errors: err, message: err.message }
+	}
+}
+
+async function sendEmail (targetEmail, html, subject) {
+	// throw { status:500, message:'this error is manipulated' }
+	console.log(targetEmail, html, subject)
 	const transporter = nodemailer.createTransport({
 		service: "gmail",
 		auth: {
@@ -122,7 +165,7 @@ async function sendVerificationEmail (user) {
 		const info = await transporter.sendMail({
 			from: process.env.MAIL_ACCOUNT,
 			to: targetEmail,
-			subject: 'Account Verification',
+			subject: subject,
 			html: html
 		})
 
@@ -139,8 +182,8 @@ async function sendVerificationEmail (user) {
 		console.log('email sent')
 	} catch (err) {
 		console.log('email not sent:', err)
-		throw { status:err.status || 500, message:'email not sent', errors:err }
+		throw { status:err.status || 500, message:'unable to send email', errors:err }
 	}
 }
 
-export { registerUser, loginUser, verifyUser, sendVerificationEmail }
+export { registerUser, loginUser, verifyUser, sendEmail, generateHourToken }
