@@ -16,4 +16,5 @@ model User {
   password String
   isVerified Boolean @default(false)
   lastSentEmail DateTime @default(now())
+  lastChangePassword DateTime @default(now())
 }

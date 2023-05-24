@@ -123,9 +123,22 @@ router.post('/verify/send-email', authenticateUser, async (req, res) => {
 })
 
 
-router.post('/forgot-password', (req, res) => {
+router.post('/forgot-password', async (req, res) => {
   const email = req.body.email
-  
+  try {
+    const user = await pFindUserByEmail(email)
+
+    if(user === null) {
+      throw { status:404, message:'User not exist' } 
+    }
+
+    
+    res.status(200).json(user)
+  } catch (err) {
+    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
+  }
+
+
   // check if the email exist on the user table
   // if exist, send reset email link to the user
 })
