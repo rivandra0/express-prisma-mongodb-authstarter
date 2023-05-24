@@ -1,12 +1,15 @@
 import express from 'express'
 const router = express.Router()
 import jwt from 'jsonwebtoken'
+import { PrismaClient } from '@prisma/client'
+const prisma = new PrismaClient()
 
 import authenticateUser from '../middlewares/authenticateUser.js'
 import { pFindUserByEmail } from '../services/prisma-queries.js'
 
 import { check, validationResult } from 'express-validator'
 import { registerUser, loginUser, verifyUser, sendEmail, generateHourToken } from '../services/auth.js'
+import { getDifferenceInSecond } from '../services/times.js'
 
 
 const validateUser = [
@@ -42,10 +45,8 @@ router.post('/login', validateUser, async (req, res) => {
   const validationRes = validationResult(req)
   try {
     checkErrorFromValidate(validationRes)
-    console.log('this is before loginuser')
     const result = await loginUser(email, password)
     console.log(result)
-    console.log('this is a success')
     res.status(result.status).json(result) 
   } catch (err) {
     res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
@@ -53,7 +54,70 @@ router.post('/login', validateUser, async (req, res) => {
 })
 
 
-router.get('/verify/:token', async (req, res) => {
+
+
+router.post('/verify/send-email', async (req, res) => {
+  const authHeader = req.headers['authorization']
+  const temporaryToken = authHeader && authHeader.split(' ')[1]
+  if (temporaryToken === null) {
+    throw { status: 401, messsage: "You don't have any token" }
+  }
+  jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      // console.log('error on verify: ',err)
+      throw { status: 401, messsage: 'token not recognized or expired' }
+    }
+    req.user = user
+  })
+
+  const user = req.user
+  const lastSentEmail = new Date(user.lastSentEmail)
+  const currentTime = new Date()
+  const differenceInSeconds = getDifferenceInSecond(lastSentEmail, currentTime)
+
+  console.log('last: ', lastSentEmail)
+  console.log('current: ', currentTime)
+  console.log('difference: ', differenceInSeconds)
+  
+  const targetEmail = user.email
+  const newUser = { email:user.email, password:user.password, use:'account-verification' }
+  const token = generateHourToken(newUser)
+  const html = `
+    <h1>VERIFY YOUR ACCOUNT</h1>
+    <p>This verification only valid for 1hr. Click the button below to verify your account</p>
+    <a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
+  `
+
+  try {
+    if (differenceInSeconds < 3600) {
+      throw { status:400, message:'Send again only 1hr after the first email' }
+    }
+
+    const user = await pFindUserByEmail(targetEmail)
+
+    if(user.isVerified) {
+      throw { status:400, message:'user already verified' }
+    }
+
+    const emailInfo = await sendEmail(targetEmail, html, 'Account Verification')
+
+    const updateLastEmailSent = await prisma.user.update({
+      where: {
+        email: targetEmail,
+      },
+      data: {
+        lastSentEmail: new Date()
+      }
+    })
+
+    res.status(200).json({ status: 200, message: 'successfully sent verification Email, check your email' })
+  } catch (err) {
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
+  }
+})
+
+
+router.get('/verify/:token', async (req, res) => { // we'll fix dis
   const token = String(req.params.token)
   try {
     await verifyUser(token)
@@ -84,43 +148,8 @@ router.get('/verify/:token', async (req, res) => {
 })
 
 
-router.post('/verify/send-email', authenticateUser, async (req, res) => {
-  const user = req.user
-  const lastSentEmail = new Date(user.lastSentEmail)
-  const currentTime = new Date()
-  const differenceInMs = currentTime - lastSentEmail
-  const differenceInSeconds = Math.floor((currentTime - lastSentEmail)/1000)
 
-  console.log('last: ', lastSentEmail)
-  console.log('current: ', currentTime)
-  console.log('difference: ', differenceInSeconds)
-  
-  const targetEmail = user.email
-  const newUser = { email:user.email, password:user.password }
-  const token = generateHourToken(newUser)
-  const html = `
-    <h1>VERIFY YOUR ACCOUNT</h1>
-    <p>This verification only valid for 1hr. Click the button below to verify your account</p>
-    <a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
-  `
 
-  try {
-    if (differenceInSeconds < 3600) {
-      throw { status:400, message:'Send again only 1hr after the first email' }
-    }
-
-    const user = await pFindUserByEmail(targetEmail)
-
-    if(user.isVerified) {
-      throw { status:400, message:'user already verified' }
-    }
-
-    const emailInfo = await sendEmail(targetEmail, html, 'Account Verification')
-    res.status(200).json({ status: 200, message: 'successfully sent verification Email, check your email' })
-  } catch (err) {
-    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
-  }
-})
 
 
 router.post('/forgot-password', async (req, res) => {
@@ -128,23 +157,65 @@ router.post('/forgot-password', async (req, res) => {
   try {
     const user = await pFindUserByEmail(email)
 
-    if(user === null) {
+    if (user === null) {
       throw { status:404, message:'User not exist' } 
     }
 
+    const lastRequest = new Date(user.lastChangePasswordRequest)
+    const currentTime = new Date()
+    const differenceInSeconds = getDifferenceInSecond(lastRequest, currentTime)
     
-    res.status(200).json(user)
+    // its 24hr in form of seconds 86400 CHANGE LATER
+    if(differenceInSeconds < 10) {
+      throw { status:400, message:'Send again only 1 day after setting the password' }
+    }
+
+    const targetEmail = user.email
+    const newUser = { email:user.email, password:user.password, use:'change-password' }
+    const token = generateHourToken(newUser)
+    const html = `
+      <h1>Change Your Password</h1>
+      <p>This password change only valid for 1 hour. Click the button below to change your password</p>
+      <a href="${process.env.SITE_HOST}/auth/forgot-password/modify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;"> Change Password </a>
+    `
+    const emailSend = await sendEmail (targetEmail, html, 'Change Password')
+
+    const updateLastEmailSent = await prisma.user.update({
+      where: {
+        email: targetEmail,
+      },
+      data: {
+        lastChangePasswordRequest: new Date()
+      }
+    })
+
+    console.log(updateLastEmailSent)
+
+    console.log(emailSend)
+    res.status(200).json({ status:200, message:'Change Password link sent, Check your email' })
   } catch (err) {
-    res.status(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
-
-
-  // check if the email exist on the user table
-  // if exist, send reset email link to the user
 })
 
+router.get('/forgot-password/modify/:token', (req, res) => {  
+  const token = String(req.params.token) //this must contain the 
 
-router.post('/forgot-password/modify', (req, res) => {
+  if (token === null) {
+    throw { status: 401, messsage: "You don't have any token" }
+  }
+
+  let userData = null
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      throw { status: 401, messsage: 'token not recognized or expired' }
+    }
+    if(user.use !== 'change-password'){
+      throw { status: 401, messsage: 'wrong token' }
+    }
+    userData = user
+  })
+
   const html = `<!DOCTYPE html>
     <html>
     <head>
@@ -180,13 +251,14 @@ router.post('/forgot-password/modify', (req, res) => {
             return;
           }
           
-          const token = 'YOUR_RESET_TOKEN'; // Replace with the actual reset token
+          const token = '${token}'; // Replace with the actual reset token
           
           // Make the POST request to the server
-          fetch('/reset-password', {
+          fetch('${process.env.SITE_HOST}/auth/forgot-password/action', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
+              'authorization': 'bearer ${token}'
             },
             body: JSON.stringify({ token, newPassword })
           })
@@ -208,7 +280,16 @@ router.post('/forgot-password/modify', (req, res) => {
     </body>
     </html>
     `
+  res.status(200).send(html)  
 })
+
+router.post('/forgot-password/action', (req, res) => {
+  console.log(req)
+  console.log(req.body)
+  res.json(req.body)
+})
+
+
 
 router.get('/secret', authenticateUser, (req, res) => {
   const secretData = ['alpha', 'bruno', 'changshi']

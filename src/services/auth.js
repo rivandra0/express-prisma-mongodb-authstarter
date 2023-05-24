@@ -98,12 +98,12 @@ async function verifyUser (token) {
 	let userData = null
 
 	try {
-
-
-
 		jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
 		    if(err) {
-		      throw { status: 403, messsage: 'Token Expired' }
+		      throw { status: 401, messsage: 'Token Expired' }
+		    }
+		    if(user.use !== 'account-verification') {
+		    	throw { status: 401, messsage: 'wrong token' }
 		    }
 		    userData = user
 	  	})
@@ -167,15 +167,6 @@ async function sendEmail (targetEmail, html, subject) {
 			to: targetEmail,
 			subject: subject,
 			html: html
-		})
-
-		const updateLastEmailSent = await prisma.user.update({
-		  where: {
-		    email: targetEmail,
-		  },
-		  data: {
-		  	lastSentEmail: new Date()
-		  }
 		})
 
 		console.log('message sent: '+ info )
