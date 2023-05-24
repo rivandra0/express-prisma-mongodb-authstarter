@@ -3,6 +3,7 @@ const router = express.Router()
 import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
+import bcrypt from 'bcrypt'
 
 import authenticateUser from '../middlewares/authenticateUser.js'
 import { pFindUserByEmail } from '../services/prisma-queries.js'
@@ -200,93 +201,126 @@ router.post('/forgot-password', async (req, res) => {
 
 router.get('/forgot-password/modify/:token', (req, res) => {  
   const token = String(req.params.token) //this must contain the 
-
-  if (token === null) {
-    throw { status: 401, messsage: "You don't have any token" }
-  }
-
-  let userData = null
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (err) {
-      throw { status: 401, messsage: 'token not recognized or expired' }
+  try {
+    if (token === null) {
+      throw { status: 401, messsage: "You don't have any token" }
     }
-    if(user.use !== 'change-password'){
-      throw { status: 401, messsage: 'wrong token' }
-    }
-    userData = user
-  })
 
-  const html = `<!DOCTYPE html>
-    <html>
-    <head>
-      <title>Change Password</title>
-    </head>
-    <body>
-      <div style="text-align: center;">
-        <h1>Change Password</h1>
-        <form id="change-password-form">
-          <div>
-            <label for="new-password">New Password</label>
-            <input type="password" id="new-password" name="newPassword" required>
-          </div>
-          <div>
-            <label for="confirm-password">Confirm Password</label>
-            <input type="password" id="confirm-password" name="confirmPassword" required>
-          </div>
-          <div>
-            <button type="submit">Change Password</button>
-          </div>
-        </form>
-      </div>
+    let userData = null
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+      if (err) {
+        throw { status: 401, messsage: 'token not recognized or expired' }
+      }
+      if(user.use !== 'change-password'){
+        throw { status: 401, messsage: 'wrong token' }
+      }
+      userData = user
+    })
 
-      <script>
-        document.getElementById('change-password-form').addEventListener('submit', function(event) {
-          event.preventDefault();
-          
-          const newPassword = document.getElementById('new-password').value;
-          const confirmPassword = document.getElementById('confirm-password').value;
-          
-          if (newPassword !== confirmPassword) {
-            alert('Passwords do not match');
-            return;
-          }
-          
-          const token = '${token}'; // Replace with the actual reset token
-          
-          // Make the POST request to the server
-          fetch('${process.env.SITE_HOST}/auth/forgot-password/action', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-              'authorization': 'bearer ${token}'
-            },
-            body: JSON.stringify({ token, newPassword })
-          })
-          .then(response => {
-            if (response.ok) {
-              alert('Password changed successfully');
-              // Redirect the user to the login page or any other desired page
-              window.location.href = '/login';
-            } else {
-              alert('Failed to change password');
+    const html = `<!DOCTYPE html>
+      <html>
+      <head>
+        <title>Change Password</title>
+      </head>
+      <body>
+        <div style="text-align: center;">
+          <h1>Change Password</h1>
+          <form id="change-password-form">
+            <div>
+              <label for="new-password">New Password</label>
+              <input type="password" id="new-password" name="newPassword" required>
+            </div>
+            <div>
+              <label for="confirm-password">Confirm Password</label>
+              <input type="password" id="confirm-password" name="confirmPassword" required>
+            </div>
+            <div>
+              <button type="submit">Change Password</button>
+            </div>
+          </form>
+        </div>
+
+        <script>
+          document.getElementById('change-password-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            
+            if (newPassword !== confirmPassword) {
+              alert('Passwords do not match');
+              return;
             }
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred');
+            
+            const token = '${token}'; // Replace with the actual reset token
+            
+            // Make the POST request to the server
+            fetch('${process.env.SITE_HOST}/auth/forgot-password/action', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'authorization': 'bearer ${token}'
+              },
+              body: JSON.stringify({ token, newPassword })
+            })
+            .then(response => {
+              if (response.ok) {
+                alert('Password changed successfully');
+                // Redirect the user to the login page or any other desired page
+                console.log('successfull')
+                window.location.href = '${process.env.LOGIN_PAGE_URL}';
+              } else {
+                alert('Failed to change password');
+              }
+            })
+            .catch(error => {
+              console.error('Error:', error);
+              alert('An error occurred');
+            });
           });
-        });
-      </script>
-    </body>
-    </html>
-    `
-  res.status(200).send(html)  
+        </script>
+      </body>
+      </html>
+      `
+    res.status(200).send(html)
+  } catch (err) {
+    res.status(err.status || 500).sendStatus(err.status).json({ status: err.status, message: err.message, completeError: err })
+  }
 })
 
-router.post('/forgot-password/action', (req, res) => {
-  console.log(req)
+router.post('/forgot-password/action', async(req, res) => {
   console.log(req.body)
-  res.json(req.body)
+  let userData = null
+  const temporaryToken = req.body.token
+  try {
+    jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+      if (err) {
+        // console.log('error on verify: ',err)
+        throw { status: 401, messsage: 'token not recognized or expired' }
+      }
+
+      if(user.use !== 'change-password') {
+        throw { status: 401, messsage: 'wrong token' }
+      }
+      userData = user
+    })
+
+    const newHashedPassword = await bcrypt.hash(req.body.newPassword, 10)
+    console.log(userData)
+    const updateLastEmailSent = await prisma.user.update({
+      where: {
+        email: userData.email,
+      },
+      data: {
+        password: newHashedPassword,
+        lastChangePassword: new Date()
+      }
+    })
+
+    res.status(200).json({ status:200, message:'password changed' })
+  } catch (err) {
+    res.status(err.status || 500).sendStatus(err.status).json({ status: err.status, message: err.message, completeError: err })
+  }
 })
 
 

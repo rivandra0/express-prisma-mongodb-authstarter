@@ -73,15 +73,15 @@ async function loginUser (email, password) {
 		// creating accesstoken
 		const accessToken = generateHourToken(userRow)
 
-		// checking if the user is verified
-		if(!userRow.isVerified) {
-			return { status: 401, message: 'Account not verified, please check your email', temporaryToken:accessToken }
-		}
-
 		// comparing the password on database and sent by the user
 		const result = await bcrypt.compare(password, userRow.password)
 		if (!result) {
 			throw { status: 400, message: 'Wrong login credentials' }
+		}
+		
+		// checking if the user is verified
+		if(!userRow.isVerified) {
+			return { status: 401, message: 'Account not verified, please check your email', temporaryToken:accessToken }
 		}
 
 		// sending response success
