@@ -150,9 +150,6 @@ router.get('/verify/:token', async (req, res) => { // we'll fix dis
 
 
 
-
-
-
 router.post('/forgot-password', async (req, res) => {
   const email = req.body.email
   try {
@@ -292,7 +289,11 @@ router.post('/forgot-password/action', async(req, res) => {
   console.log(req.body)
   let userData = null
   const temporaryToken = req.body.token
+  const newPassword = req.body.newPassword
   try {
+    if(newPassword.length < 8) {
+      throw { status:400, message:'must be 8-100 character ' }
+    }
     jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
       if (err) {
         // console.log('error on verify: ',err)
@@ -305,7 +306,7 @@ router.post('/forgot-password/action', async(req, res) => {
       userData = user
     })
 
-    const newHashedPassword = await bcrypt.hash(req.body.newPassword, 10)
+    const newHashedPassword = await bcrypt.hash(newPassword, 10)
     console.log(userData)
     const updateLastEmailSent = await prisma.user.update({
       where: {
