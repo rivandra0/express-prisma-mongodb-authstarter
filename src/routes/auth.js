@@ -60,13 +60,14 @@ router.post('/login', validateUser, async (req, res) => {
 router.post('/verify/send-email', async (req, res) => {
   const authHeader = req.headers['authorization']
   const temporaryToken = authHeader && authHeader.split(' ')[1]
+  
   if (temporaryToken === null) {
-    throw { status: 401, messsage: "You don't have any token" }
+    res.status(401).json({ status: 401, messsage: "You don't have any token" })
   }
   jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
     if (err) {
       // console.log('error on verify: ',err)
-      throw { status: 401, messsage: 'token not recognized or expired' }
+      res.status(401).json({ status: 401, messsage: 'token not recognized or expired' })
     }
     req.user = user
   })
@@ -76,10 +77,6 @@ router.post('/verify/send-email', async (req, res) => {
   const currentTime = new Date()
   const differenceInSeconds = getDifferenceInSecond(lastSentEmail, currentTime)
 
-  console.log('last: ', lastSentEmail)
-  console.log('current: ', currentTime)
-  console.log('difference: ', differenceInSeconds)
-  
   const targetEmail = user.email
   const newUser = { email:user.email, password:user.password, use:'account-verification' }
   const token = generateHourToken(newUser)

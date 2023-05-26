@@ -5,13 +5,14 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon app.js"
+    "test": "vitest",
+    "dev": "nodemon index.js"
   },
   "author": "Muhammad Rivandra",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^4.14.1",
+    "axios": "^1.4.0",
     "bcrypt": "^5.1.0",
     "body-parser": "^1.20.2",
     "dotenv": "^16.0.3",
@@ -23,7 +24,9 @@
     "nodemon": "^2.0.22"
   },
   "devDependencies": {
+    "@vitest/ui": "^0.31.1",
     "prisma": "^4.14.1",
+    "supertest": "^6.3.3",
     "vitest": "^0.31.1"
   }
 }
