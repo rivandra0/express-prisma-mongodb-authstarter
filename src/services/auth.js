@@ -41,7 +41,7 @@ async function registerUser (email, password) {
 					email: targetEmail
 				}
 			})
-			console.log('newly created user is deleted')
+			// console.log('newly created user is deleted')
 			throw { status:500, message:err.message }
 		})
 
@@ -55,7 +55,7 @@ async function registerUser (email, password) {
 }
 
 async function loginUser (email, password) {		
-	console.log('start searching')
+	// console.log('start searching')
 
 	try {
 		// finding one matching user'
@@ -66,10 +66,10 @@ async function loginUser (email, password) {
 		})
 
 		if(userRow === null) {
-			console.log(userRow)
+			// console.log(userRow)
 			throw { status: 404, message: 'User not found' }
 		}
-		console.log('searching result', userRow)
+		// console.log('searching result', userRow)
 		// creating accesstoken
 		const accessToken = generateHourToken(userRow)
 
@@ -85,7 +85,7 @@ async function loginUser (email, password) {
 		}
 
 		// sending response success
-		console.log('THIS GUY ACTUALLY LOGGED IN') 
+		// console.log('THIS GUY ACTUALLY LOGGED IN')
 		return { status:200, message: 'Logged in', token: accessToken }
 
 	} catch (err) {
@@ -107,6 +107,16 @@ async function verifyUser (token) {
 		    }
 		    userData = user
 	  	})
+
+		const userRead = await prisma.user.findFirst({
+			where: {
+		    	email: userData.email,
+		  	},
+		})
+
+		if(userRead.isVerified === true) {
+			throw { status: 403, messsage: 'Account already verified' }
+		}
 
 		const updateUser = await prisma.user.update({
 		  where: {
@@ -146,7 +156,7 @@ async function forgotPassword (email) {
 
 async function sendEmail (targetEmail, html, subject) {
 	// throw { status:500, message:'this error is manipulated' }
-	console.log(targetEmail, html, subject)
+	// console.log(targetEmail, html, subject)
 	const transporter = nodemailer.createTransport({
 		service: "gmail",
 		auth: {
@@ -169,10 +179,10 @@ async function sendEmail (targetEmail, html, subject) {
 			html: html
 		})
 
-		console.log('message sent: '+ info )
-		console.log('email sent')
+		// console.log('message sent: '+ info )
+		// console.log('email sent')
 	} catch (err) {
-		console.log('email not sent:', err)
+		// console.log('email not sent:', err)
 		throw { status:err.status || 500, message:'unable to send email', errors:err }
 	}
 }

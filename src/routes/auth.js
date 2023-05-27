@@ -42,12 +42,12 @@ router.post('/register', validateUser, async (req, res) => {
 
 router.post('/login', validateUser, async (req, res) => {
   const { email, password } = req.body
-  console.log(req.body)
+  // console.log(req.body)
   const validationRes = validationResult(req)
   try {
     checkErrorFromValidate(validationRes)
     const result = await loginUser(email, password)
-    console.log(result)
+    // console.log(result)
     res.status(result.status).json(result) 
   } catch (err) {
     res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
@@ -161,7 +161,7 @@ router.post('/forgot-password', async (req, res) => {
     const differenceInSeconds = getDifferenceInSecond(lastRequest, currentTime)
     
     // its 24hr in form of seconds 86400 CHANGE LATER
-    if(differenceInSeconds < 10) {
+    if(differenceInSeconds < 86400) {
       throw { status:400, message:'Send again only 1 day after setting the password' }
     }
 
@@ -184,9 +184,9 @@ router.post('/forgot-password', async (req, res) => {
       }
     })
 
-    console.log(updateLastEmailSent)
+    // console.log(updateLastEmailSent)
 
-    console.log(emailSend)
+    // console.log(emailSend)
     res.status(200).json({ status:200, message:'Change Password link sent, Check your email' })
   } catch (err) {
     res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
@@ -283,7 +283,7 @@ router.get('/forgot-password/modify/:token', (req, res) => {
 })
 
 router.post('/forgot-password/action', async(req, res) => {
-  console.log(req.body)
+  // console.log(req.body)
   let userData = null
   const temporaryToken = req.body.token
   const newPassword = req.body.newPassword
@@ -304,7 +304,7 @@ router.post('/forgot-password/action', async(req, res) => {
     })
 
     const newHashedPassword = await bcrypt.hash(newPassword, 10)
-    console.log(userData)
+    // console.log(userData)
     const updateLastEmailSent = await prisma.user.update({
       where: {
         email: userData.email,
@@ -326,7 +326,7 @@ router.post('/forgot-password/action', async(req, res) => {
 router.get('/secret', authenticateUser, (req, res) => {
   const secretData = ['alpha', 'bruno', 'changshi']
   const user = req.user
-  console.log('this user is authenticated', user)
+  // console.log('this user is authenticated', user)
   res.status(200).json({data:secretData})
 })
 
