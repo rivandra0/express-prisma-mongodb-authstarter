@@ -259,7 +259,7 @@ async function verifyAndSendEmail (temporaryToken) {
 	}
 }
 
-async function getChangePasswordHtml (token) {
+function getChangePasswordHtml (token) {
 	try {
 		if (token === null) {
 	      throw { status: 401, messsage: "You don't have any token" }

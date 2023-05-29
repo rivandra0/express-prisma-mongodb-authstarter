@@ -1,14 +1,8 @@
 import express from 'express'
 const router = express.Router()
-import jwt from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
-import bcrypt from 'bcrypt'
-
 import authenticateUser from '../middlewares/authenticateUser.js'
-import { pFindUserByEmail } from '../services/prisma-queries.js'
-
 import { check, validationResult } from 'express-validator'
+import { getDifferenceInSecond } from '../services/times.js'
 import { 
   registerUser, 
   loginUser, 
@@ -20,7 +14,6 @@ import {
   verifyAndSendEmail,
   getChangePasswordHtml
 } from '../services/auth.js'
-import { getDifferenceInSecond } from '../services/times.js'
 
 
 const validateUser = [
@@ -117,7 +110,7 @@ router.post('/forgot-password', async (req, res) => {
 router.get('/forgot-password/modify/:token', (req, res) => {  
   const token = String(req.params.token) //this must contain the 
   try {
-    const changePasswordHtml = await getChangePasswordHtml(token)
+    const changePasswordHtml = getChangePasswordHtml(token)
     res.status(200).send(changePasswordHtml)
   } catch (err) {
     res.status(err.status || 500).sendStatus(err.status).json({ status: err.status, message: err.message, completeError: err })
