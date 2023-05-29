@@ -112,7 +112,7 @@ router.get('/forgot-password/modify/:token', (req, res) => {
     const changePasswordHtml = getChangePasswordHtml(token)
     res.status(200).send(changePasswordHtml)
   } catch (err) {
-    res.status(err.status || 500).sendStatus(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
 })
 
@@ -120,16 +120,19 @@ router.post('/forgot-password/action', async(req, res) => {
   const temporaryToken = req.body.token
   const newPassword = req.body.newPassword
   try {
-    const forgotPasswordAction = forgotPasswordAction(temporaryToken, newPassword)
+    const data = await forgotPasswordAction(temporaryToken, newPassword)
     res.status(200).json({ status:200, message:'password changed' })
   } catch (err) {
-    res.status(err.status || 500).sendStatus(err.status).json({ status: err.status, message: err.message, completeError: err })
+    res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
   }
 })
 
+
+
+
 router.get('/secret', authenticateUser, (req, res) => {
-  const secretData = ['alpha', 'bruno', 'changshi']
   const user = req.user
+  const secretData = ['alpha', 'bruno', 'changshi']
   res.status(200).json({data:secretData})
 })
 

@@ -346,34 +346,48 @@ function getChangePasswordHtml (token) {
 
 async function forgotPasswordAction (temporaryToken, newPassword) {
      let userData = null
-    try {
+     const LIMIT_TIME = 3600
+    	try {
 		if(newPassword.length < 8) {
-	      throw { status:400, message:'must be 8-100 character ' }
-	    }
-	    jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-	      if (err) {
-	        throw { status: 401, messsage: 'token not recognized or expired' }
-	      }
+	      	throw { status:400, message:'must be 8-100 character ' }
+	    	}
+	    	jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+	      	if (err) {
+	        		throw { status: 401, messsage: 'token not recognized or expired' }
+	      	}
 
-	      if(user.use !== 'change-password') {
-	        throw { status: 401, messsage: 'wrong token' }
-	      }
-	      userData = user
-	    })
+		     if(user.use !== 'change-password') {
+		        	throw { status: 401, messsage: 'wrong token' }
+		     }
+		     userData = user
+		})
 
-	    const newHashedPassword = await bcrypt.hash(newPassword, 10)
-	    // console.log(userData)
-	    const updateLastEmailSent = await prisma.user.update({
-	      where: {
-	        email: userData.email,
-	      },
+	    	const userFound = await pFindUserByEmail(userData.email)
+	    	if (userFound === null) {
+	    		throw { status: 404, message: 'user not exist'}
+	    	}
+
+	    	const lastRequest = new Date(userFound.lastChangePassword)
+	    	const currentTime = new Date()
+	    	const differenceInSeconds = getDifferenceInSecond(lastRequest, currentTime)
+	    
+	    	if(differenceInSeconds < LIMIT_TIME) {
+	      	throw { status:403, message:'Password already changed today' }
+	    	}
+	    	
+	    	const newHashedPassword = await bcrypt.hash(newPassword, 10)
+
+	    	const updateLastEmailSent = await prisma.user.update({
+	    	where: {
+	        	email: userData.email,
+	     },
 	      data: {
 	        password: newHashedPassword,
 	        lastChangePassword: new Date()
 	      }
 	    })
     } catch (err) {
-    	throw { status: err.status || 500, errors: err, message: err.message }
+    		throw { status: err.status || 500, errors: err, message: err.message }
     }
 }
 
