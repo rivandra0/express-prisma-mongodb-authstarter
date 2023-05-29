@@ -135,18 +135,39 @@ async function verifyUser (token) {
 
 async function forgotPassword (email) {
 	try {
-		// check if the email exist or not
-		const isExist = await prisma.user.findUnique({
-		  where: {
-		    email: email
-		  }
-		})
-		if (!isExist) {
-			throw { status: 404, message:'User not exist'}
-		}
-		// generate accessToken
-		const accessToken = generateHourToken(isExist)
-		// send the token as a link to the user
+		// its 24hr in form of seconds 86400 CHANGE LATER
+		const LIMIT_TIME = 86400
+		const user = await pFindUserByEmail(email)
+	    if (user === null) {
+	      throw { status:404, message:'User not exist' } 
+	    }
+
+	    const lastRequest = new Date(user.lastChangePasswordRequest)
+	    const currentTime = new Date()
+	    const differenceInSeconds = getDifferenceInSecond(lastRequest, currentTime)
+	    
+	    if(differenceInSeconds < LIMIT_TIME) {
+	      throw { status:400, message:'Send again only 1 day after setting the password' }
+	    }
+
+	    const targetEmail = user.email
+	    const newUser = { email:user.email, password:user.password, use:'change-password' }
+	    const token = generateHourToken(newUser)
+	    const html = `
+	      <h1>Change Your Password</h1>
+	      <p>This password change only valid for 1 hour. Click the button below to change your password</p>
+	      <a href="${process.env.SITE_HOST}/auth/forgot-password/modify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;"> Change Password </a>
+	    `
+	    const emailSend = await sendEmail (targetEmail, html, 'Change Password')
+
+	    const updateLastEmailSent = await prisma.user.update({
+	      where: {
+	        email: targetEmail,
+	      },
+	      data: {
+	        lastChangePasswordRequest: new Date()
+	      }
+	    })
 
 
 	} catch (err) {
@@ -187,4 +208,6 @@ async function sendEmail (targetEmail, html, subject) {
 	}
 }
 
-export { registerUser, loginUser, verifyUser, sendEmail, generateHourToken }
+
+
+export { registerUser, loginUser, verifyUser, sendEmail, generateHourToken, forgotPassword }

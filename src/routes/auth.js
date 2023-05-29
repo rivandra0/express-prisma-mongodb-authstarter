@@ -9,7 +9,7 @@ import authenticateUser from '../middlewares/authenticateUser.js'
 import { pFindUserByEmail } from '../services/prisma-queries.js'
 
 import { check, validationResult } from 'express-validator'
-import { registerUser, loginUser, verifyUser, sendEmail, generateHourToken } from '../services/auth.js'
+import { registerUser, loginUser, verifyUser, sendEmail, generateHourToken, forgotPassword } from '../services/auth.js'
 import { getDifferenceInSecond } from '../services/times.js'
 
 
@@ -42,12 +42,10 @@ router.post('/register', validateUser, async (req, res) => {
 
 router.post('/login', validateUser, async (req, res) => {
   const { email, password } = req.body
-  // console.log(req.body)
   const validationRes = validationResult(req)
   try {
     checkErrorFromValidate(validationRes)
     const result = await loginUser(email, password)
-    // console.log(result)
     res.status(result.status).json(result) 
   } catch (err) {
     res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
@@ -66,7 +64,6 @@ router.post('/verify/send-email', async (req, res) => {
   }
   jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
     if (err) {
-      // console.log('error on verify: ',err)
       res.status(401).json({ status: 401, messsage: 'token not recognized or expired' })
     }
     req.user = user
@@ -114,7 +111,7 @@ router.post('/verify/send-email', async (req, res) => {
   }
 })
 
-
+// OKEY
 router.get('/verify/:token', async (req, res) => { // we'll fix dis
   const token = String(req.params.token)
   try {
@@ -150,43 +147,8 @@ router.get('/verify/:token', async (req, res) => { // we'll fix dis
 router.post('/forgot-password', async (req, res) => {
   const email = req.body.email
   try {
-    const user = await pFindUserByEmail(email)
-
-    if (user === null) {
-      throw { status:404, message:'User not exist' } 
-    }
-
-    const lastRequest = new Date(user.lastChangePasswordRequest)
-    const currentTime = new Date()
-    const differenceInSeconds = getDifferenceInSecond(lastRequest, currentTime)
-    
-    // its 24hr in form of seconds 86400 CHANGE LATER
-    if(differenceInSeconds < 86400) {
-      throw { status:400, message:'Send again only 1 day after setting the password' }
-    }
-
-    const targetEmail = user.email
-    const newUser = { email:user.email, password:user.password, use:'change-password' }
-    const token = generateHourToken(newUser)
-    const html = `
-      <h1>Change Your Password</h1>
-      <p>This password change only valid for 1 hour. Click the button below to change your password</p>
-      <a href="${process.env.SITE_HOST}/auth/forgot-password/modify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;"> Change Password </a>
-    `
-    const emailSend = await sendEmail (targetEmail, html, 'Change Password')
-
-    const updateLastEmailSent = await prisma.user.update({
-      where: {
-        email: targetEmail,
-      },
-      data: {
-        lastChangePasswordRequest: new Date()
-      }
-    })
-
-    // console.log(updateLastEmailSent)
-
-    // console.log(emailSend)
+    const forgotPasswordData = await forgotPassword(email)
+    console.log(forgotPasswordData)
     res.status(200).json({ status:200, message:'Change Password link sent, Check your email' })
   } catch (err) {
     res.status(err.status || 500).json({ status: err.status, message: err.message, completeError: err })
@@ -330,4 +292,4 @@ router.get('/secret', authenticateUser, (req, res) => {
   res.status(200).json({data:secretData})
 })
 
-export default router;
+export default router
