@@ -1,6 +1,7 @@
 import app from '../../../app.js'
 import request from 'supertest'
 import { describe, expect, test } from 'vitest'
+import { unverifiedUserData } from '../../seeds/accounts.js'
 
 describe('Register', () =>{
 	test.concurrent('Succesfull register return 201', async () => {
@@ -15,7 +16,7 @@ describe('Register', () =>{
 
 	test.concurrent('Email already used return 400', async () => {
 		const account = {
-			email: 'tuyulmohak0@gmail.com',
+			email: unverifiedUserData.email,
 			password: 'muaracoder'
 		}
 		const res = await request(app).post('/auth/register').send(account)
@@ -25,7 +26,7 @@ describe('Register', () =>{
 
 	test.concurrent('Bad Email &/ password Format return 400', async () => {
 		const account = {
-			email: 'tuyulmohak0@gmailcom',
+			email: 'mbuababuadfa',
 			password: 'muara'
 		}
 		const res = await request(app).post('/auth/register').send(account)

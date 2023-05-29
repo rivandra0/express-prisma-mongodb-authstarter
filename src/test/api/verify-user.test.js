@@ -2,11 +2,10 @@ import app from '../../../app.js'
 import request from 'supertest'
 import { describe, expect, test } from 'vitest'
 import { generateHourToken } from '../../services/auth.js'
+import { successVerifyTestUser } from '../../seeds/accounts.js'
 
-const unVerifiedUserData = { email: 'tuyulmohak0@gmail.com', password:'muaracoder', use: 'account-verification' }
-
-// email:'tuyulmohak0@gmail.com', isVerified:false, use:'account-verification'
-const token = generateHourToken(unVerifiedUserData)
+successVerifyTestUser.use = 'account-verification'
+const token = generateHourToken(successVerifyTestUser)
 
 describe('Verify Account', () => {
 	test('Email Registered and not verified return status 200', async () => {

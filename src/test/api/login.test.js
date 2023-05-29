@@ -6,7 +6,7 @@ const verifiedUserData = { email: 'loginverified0@mail.com', password:'muaracode
 const unVerifiedUserData = { email: 'loginunverified@mail.com', password:'muaracoder' }
 const notRegisteredUserDataa = { email: 'notregistered0@mail.com', password: 'muaracoder' }
 const badFormatUserData = { email: 'notregistered0@mailcom', password: 'muara' }
-const CorrectEmailWrongPasswordData = { email: 'rivandra0@gmail.com', password:'muaramuara' }
+const CorrectEmailWrongPasswordData = { email: 'loginverified0@mail.com', password:'muaramuara' }
 
 describe('Login', () => {
 	test.concurrent('Email Registered and Verified Must return status 200  ',async () => {

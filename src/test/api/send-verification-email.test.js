@@ -2,14 +2,14 @@ import app from '../../../app.js'
 import request from 'supertest'
 import { describe, expect, test } from 'vitest'
 
-const verifiedUserData = { email: 'rivandra0@gmail.com', password:'muaracoder' }
+import { verifiedUserData, successVerifyTestUser, failVerifyTestUser } from '../../seeds/accounts.js'
 import { pFindUserByEmail } from '../../services/prisma-queries.js'
 import { generateHourToken } from '../../services/auth.js'
 
 describe('Send Verification Email', () =>{
 	test.concurrent('Succesfull send verification return 201', async () => {
 		const account = {
-			email: 'verifysuccess@mail.com',
+			email: successVerifyTestUser.email,
 			password: 'muaracoder'
 		}
 		const successUser = await pFindUserByEmail(account.email)
@@ -21,7 +21,7 @@ describe('Send Verification Email', () =>{
 
 	test.concurrent('fail send verification (under 1hr from last request) return 201', async () => {
 		const account = {
-			email: 'verifyfail@mail.com',
+			email: failVerifyTestUser.email,
 			password: 'muaracoder'
 		}
 		const failUser = await pFindUserByEmail(account.email)
