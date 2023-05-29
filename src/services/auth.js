@@ -4,7 +4,6 @@ import bcrypt from "bcrypt"
 import jwt from 'jsonwebtoken'
 import nodemailer from 'nodemailer'
 
-
 import { pFindUserByEmail } from './prisma-queries.js'
 import { getDifferenceInSecond } from '../services/times.js'
 
@@ -110,7 +109,7 @@ async function verifyUser (token) {
 
 		const userRead = await prisma.user.findFirst({
 			where: {
-		    	email: userData.email,
+		    		email: userData.email,
 		  	},
 		})
 
@@ -209,19 +208,18 @@ async function sendEmail (targetEmail, html, subject) {
 }
 
 async function verifyAndSendEmail (temporaryToken) {
-	const LIMIT_TIME = 10 //or 1 hr
+	const LIMIT_TIME = 3600 //or 1 hr
 	try {
 		let userDat = null
-	    if (temporaryToken === null) {
-	      throw { status: 401, messsage: "You don't have any token" }
-	    }
+	    	if (temporaryToken === null) {
+	      	throw { status: 401, messsage: "You don't have any token" }
+	    	}
 	    jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, userData) => {
 	      if (err) {
 	        throw { status: 401, messsage: 'token not recognized or expired' }
 	      }
 	      userDat = userData
 	    })
-
 	    const lastSentEmail = new Date(userDat.lastSentEmail)
 	    const currentTime = new Date()
 	    const differenceInSeconds = getDifferenceInSecond(lastSentEmail, currentTime)
@@ -235,13 +233,13 @@ async function verifyAndSendEmail (temporaryToken) {
 	      <a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
 	    `
 	    if (differenceInSeconds < LIMIT_TIME) {
-	      throw { status:400, message:'Send again only 1hr after the first email' }
+	      throw { status:403, message:'Send again only 1hr after the first email' }
 	    }
 
 	    const user = await pFindUserByEmail(targetEmail)
 
 	    if(user.isVerified) {
-	      throw { status:400, message:'user already verified' }
+	      throw { status:403, message:'user already verified' }
 	    }
 
 	    const emailInfo = await sendEmail(targetEmail, html, 'Account Verification')
@@ -380,4 +378,14 @@ async function forgotPasswordAction (temporaryToken, newPassword) {
 }
 
 
-export { registerUser, loginUser, verifyUser, sendEmail, generateHourToken, forgotPassword, forgotPasswordAction, verifyAndSendEmail, getChangePasswordHtml }
+export { 
+	registerUser, 
+	loginUser, 
+	verifyUser, 
+	sendEmail, 
+	generateHourToken, 
+	forgotPassword, 
+	forgotPasswordAction, 
+	verifyAndSendEmail, 
+	getChangePasswordHtml 
+}

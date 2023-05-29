@@ -55,7 +55,6 @@ router.post('/login', validateUser, async (req, res) => {
 })
 
 router.post('/verify/send-email', async (req, res) => {
-  const LIMIT_TIME = 10 //or 1 hr
   const authHeader = req.headers['authorization']
   const temporaryToken = authHeader && authHeader.split(' ')[1]
 
