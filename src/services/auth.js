@@ -6,7 +6,7 @@ import nodemailer from 'nodemailer'
 
 
 import { pFindUserByEmail } from './prisma-queries.js'
-
+import { getDifferenceInSecond } from '../services/times.js'
 
 function generateHourToken(data) {
 	return jwt.sign(data, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
@@ -136,7 +136,7 @@ async function verifyUser (token) {
 async function forgotPassword (email) {
 	try {
 		// its 24hr in form of seconds 86400 CHANGE LATER
-		const LIMIT_TIME = 86400
+		const LIMIT_TIME = 10
 		const user = await pFindUserByEmail(email)
 	    if (user === null) {
 	      throw { status:404, message:'User not exist' } 
@@ -208,6 +208,176 @@ async function sendEmail (targetEmail, html, subject) {
 	}
 }
 
+async function verifyAndSendEmail (temporaryToken) {
+	const LIMIT_TIME = 10 //or 1 hr
+	try {
+		let userDat = null
+	    if (temporaryToken === null) {
+	      throw { status: 401, messsage: "You don't have any token" }
+	    }
+	    jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, userData) => {
+	      if (err) {
+	        throw { status: 401, messsage: 'token not recognized or expired' }
+	      }
+	      userDat = userData
+	    })
+
+	    const lastSentEmail = new Date(userDat.lastSentEmail)
+	    const currentTime = new Date()
+	    const differenceInSeconds = getDifferenceInSecond(lastSentEmail, currentTime)
+
+	    const targetEmail = userDat.email
+	    const newUser = { email:userDat.email, password:userDat.password, use:'account-verification' }
+	    const token = generateHourToken(newUser)
+	    const html = `
+	      <h1>VERIFY YOUR ACCOUNT</h1>
+	      <p>This verification only valid for 1hr. Click the button below to verify your account</p>
+	      <a href="${process.env.SITE_HOST}/auth/verify/${token}" style="text-decoration: none; background-color: #eaeaea; color: #333; padding: 20px 20px; border-radius: 4px;">Verify Account</a>
+	    `
+	    if (differenceInSeconds < LIMIT_TIME) {
+	      throw { status:400, message:'Send again only 1hr after the first email' }
+	    }
+
+	    const user = await pFindUserByEmail(targetEmail)
+
+	    if(user.isVerified) {
+	      throw { status:400, message:'user already verified' }
+	    }
+
+	    const emailInfo = await sendEmail(targetEmail, html, 'Account Verification')
+
+	    const updateLastEmailSent = await prisma.user.update({
+	      where: {
+	        email: targetEmail,
+	      },
+	      data: {
+	        lastSentEmail: new Date()
+	      }
+	    })
+	} catch (err) {
+		throw { status:err.status || 500, message:err.message, errors:err }
+	}
+}
+
+async function getChangePasswordHtml (token) {
+	try {
+		if (token === null) {
+	      throw { status: 401, messsage: "You don't have any token" }
+	    }
+
+	    let userData = null
+	    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+	      if (err) {
+	        throw { status: 401, messsage: 'token not recognized or expired' }
+	      }
+	      if(user.use !== 'change-password'){
+	        throw { status: 401, messsage: 'wrong token' }
+	      }
+	      userData = user
+	    })
+
+	    const html = `<!DOCTYPE html>
+	      <html>
+	      <head>
+	        <title>Change Password</title>
+	      </head>
+	      <body>
+	        <div style="text-align: center;">
+	          <h1>Change Password</h1>
+	          <form id="change-password-form">
+	            <div>
+	              <label for="new-password">New Password</label>
+	              <input type="password" id="new-password" name="newPassword" required>
+	            </div>
+	            <div>
+	              <label for="confirm-password">Confirm Password</label>
+	              <input type="password" id="confirm-password" name="confirmPassword" required>
+	            </div>
+	            <div>
+	              <button type="submit">Change Password</button>
+	            </div>
+	          </form>
+	        </div>
+
+	        <script>
+	          document.getElementById('change-password-form').addEventListener('submit', function(event) {
+	            event.preventDefault();
+	            
+	            const newPassword = document.getElementById('new-password').value;
+	            const confirmPassword = document.getElementById('confirm-password').value;
+	            
+	            if (newPassword !== confirmPassword) {
+	              alert('Passwords do not match');
+	              return;
+	            }
+	            
+	            const token = '${token}'; // Replace with the actual reset token
+	            
+	            // Make the POST request to the server
+	            fetch('${process.env.SITE_HOST}/auth/forgot-password/action', {
+	              method: 'POST',
+	              headers: {
+	                'Content-Type': 'application/json',
+	                'authorization': 'bearer ${token}'
+	              },
+	              body: JSON.stringify({ token, newPassword })
+	            })
+	            .then(response => {
+	              if (response.ok) {
+	                alert('Password changed successfully');
+	                // Redirect the user to the login page or any other desired page
+	                console.log('successfull')
+	                window.location.href = '${process.env.LOGIN_PAGE_URL}';
+	              } else {
+	                alert('Failed to change password');
+	              }
+	            })
+	            .catch(error => {
+	              console.error('Error:', error);
+	              alert('An error occurred');
+	            });
+	          });
+	        </script>
+	      </body>
+	      </html>
+	      `
+	} catch(err) {
+		throw { status:err.status || 500, message:err.message, errors:err }
+	}
+}
+
+async function forgotPasswordAction (temporaryToken, newPassword) {
+     let userData = null
+    try {
+		if(newPassword.length < 8) {
+	      throw { status:400, message:'must be 8-100 character ' }
+	    }
+	    jwt.verify(temporaryToken, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+	      if (err) {
+	        throw { status: 401, messsage: 'token not recognized or expired' }
+	      }
+
+	      if(user.use !== 'change-password') {
+	        throw { status: 401, messsage: 'wrong token' }
+	      }
+	      userData = user
+	    })
+
+	    const newHashedPassword = await bcrypt.hash(newPassword, 10)
+	    // console.log(userData)
+	    const updateLastEmailSent = await prisma.user.update({
+	      where: {
+	        email: userData.email,
+	      },
+	      data: {
+	        password: newHashedPassword,
+	        lastChangePassword: new Date()
+	      }
+	    })
+    } catch (err) {
+    	throw { status: err.status || 500, errors: err, message: err.message }
+    }
+}
 
 
-export { registerUser, loginUser, verifyUser, sendEmail, generateHourToken, forgotPassword }
+export { registerUser, loginUser, verifyUser, sendEmail, generateHourToken, forgotPassword, forgotPasswordAction, verifyAndSendEmail, getChangePasswordHtml }
